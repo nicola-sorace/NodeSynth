@@ -50,7 +50,7 @@ class Node:
         self.ins = ins
         self.outs = outs
 
-        self.b = (x, y, width, max(len(self.ins)*PR*3+HH,len(self.outs)*PR*3+HH)) #Node's bounding box
+        self.b = (x, y, width, 0) #Node's bounding box
         self.bIn = (0, 0, 0, 0) #Input ports' bounding box
         self.bOut = (0, 0, 0, 0) #Output ports' bounding box
         self.bTxt = (0, 0, 0, 0) #Input value's text boxes' (when nothing is connected) bounding box
@@ -82,7 +82,8 @@ class Node:
                 pygame.draw.ellipse(screen, WIRECOLOR, [p1[0]-NCR, p1[1]-NCR, NCR*2, NCR*2])
                 pygame.draw.ellipse(screen, WIRECOLOR, [p2[0]-NCR, p2[1]-NCR, NCR*2, NCR*2])
             else:
-                txt = str(port[1].default)
+                if port[1].default > 9999999: txt = str("%.1e" % port[1].default)
+                else: txt = str(port[1].default)
                 pygame.draw.rect(screen, (255,255,255), [self.bIn[0]+self.bIn[2], self.bIn[1]+port[0]*PR*3, TBW, PR*2])
                 name = FONT.render(txt, 1, (0, 0, 0))
                 screen.blit(name, (self.bIn[0]+self.bIn[2]+(TBW-FONT.size(txt)[0])/2, self.bIn[1]+port[0]*PR*3))
@@ -115,6 +116,9 @@ class Node:
         return int(y/(PR*3))
 
     def updateBounds(self):
+
+        self.b = (self.b[0], self.b[1], self.b[2], max(len(self.ins)*PR*3+HH,len(self.outs)*PR*3+HH))
+
         h = len(self.ins)*PR*3
         self.bIn = (self.b[0]-PR, self.b[1]+HH, 0, h)
         for port in self.ins:
@@ -132,7 +136,6 @@ class Node:
 
 class OutputNode(Node):
     def __init__(self, x, y):
-
         Node.__init__(self, x, y,
             "Output",
             [Input("In", 0)],
@@ -144,21 +147,19 @@ class OutputNode(Node):
 
 class ValueNode(Node):
     def __init__(self, x, y):
-
         Node.__init__(self, x, y,
-            "Fixed Value",
+            "Value",
             [Input("Value", 0)],
             [""],
-            117)
+            116)
 
 class GeneratorNode(Node):
     def __init__(self, x, y):
-
         Node.__init__(self, x, y,
             "Wave Generator",
             [Input("Amplitude", 1), Input("Frequency", 1), Input("X-Offset", 0), Input("Y-Offset", 0)],
-            ["Sine","Square","Triangle","Sawtooth","y = x"],
-            250)
+            ["Sine","Square","Triangle","Sawtooth","Heaviside", "y = x"],
+            230)
 
     def getValue(self, n, t):
         a = self.ins[0].getValue(t)
@@ -174,18 +175,18 @@ class GeneratorNode(Node):
         elif n==1: out = 2*(np.round(t%1)-0.5) #out = (-1 if t%1<0.5 else 1)       #Square
         elif n==2: out = np.abs(((t-0.25)%1-0.5)*2)*2-1                             #Triangle
         elif n==3: out = (t%1-0.5)*2                  #Sawtooth
-        elif n==4: out = t                             #y=x
+        elif n==4: out = heaviside(t)                  #Heaviside
+        elif n==5: out = t                             #y=x
 
         return a*out+y
 
 class MathNode(Node):
     def __init__(self, x, y):
-
         Node.__init__(self, x, y,
             "Math",
             [Input("a", 0), Input("b", 0)],
             ["a+b","a*b","max","min"],
-            150)
+            130)
 
     def getValue(self, n, t):
         a = self.ins[0].getValue(t)
@@ -198,12 +199,11 @@ class MathNode(Node):
 
 class TransformNode(Node):
     def __init__(self, x, y):
-
         Node.__init__(self, x, y,
             "Transform",
             [Input("In", 0), Input("Amplitude", 1), Input("Frequency", 1), Input("X-Offset", 0), Input("Y-Offset", 0)],
             ["Out"],
-            200)
+            190)
 
     def getValue(self, n, t):
         a = self.ins[1].getValue(t)
@@ -211,6 +211,65 @@ class TransformNode(Node):
         x = self.ins[3].getValue(t)
         y = self.ins[4].getValue(t)
         return a*self.ins[0].getValue(t*f-x)+y
+
+class SectionNode(Node):
+    def __init__(self, x, y):
+        Node.__init__(self, x, y,
+            "Section",
+            [Input("In", 0), Input("Min", 0), Input("Max", 1)],
+            ["Min", "Max", "Both"],
+            150)
+
+    def getValue(self, n, t):
+        v = self.ins[0].getValue(t)
+        mi = self.ins[1].getValue(t)
+        ma = self.ins[2].getValue(t)
+
+        if n==0 or n==2:
+            v = v*heaviside(t-mi)
+        if n==1 or n==2:
+            v = v*heaviside(ma-t)
+
+        return v
+
+''' Failed node tests:
+class SmoothNode(Node):
+    def __init__(self, x, y):
+        Node.__init__(self, x, y,
+            "Smoothing",
+            [Input("In", 0), Input("Factor", 1), Input("Steps", 1)],
+            ["Out"],
+            160)
+
+    def getValue(self, n, t):
+        i = self.ins[0]
+        f = self.ins[1].getValue(t)
+        s = self.ins[2].getValue(t)
+
+        return np.sum([i.getValue(t+(f/s)*x) for x in range(int(-s),int(s))]) / (s*2)
+
+        #return np.sum([i.getValue(t+x/100) for x in range(int(-f),int(+f))]) / (f*2+1)
+
+class EchoNode(Node):
+    def __init__(self, x, y):
+        Node.__init__(self, x, y,
+            "Echo",
+            [Input("In", 0), Input("Number", 1), Input("Delay", 100), Input("Falloff", 0.5)],
+            ["Out", "Echo Only"],
+            220)
+
+    def getValue(self, n, t):
+        if n==0: v = self.ins[0].getValue(t)
+        else: v = 0
+        r = int(self.ins[1].getValue(t))
+        d = self.ins[2].getValue(t)
+        f = self.ins[3].getValue(t)
+
+        for i in range(1,r+1):
+            v += f**i * self.ins[0].getValue(t - d*i)
+
+        return v
+'''
 
 class OscilloscopeNode(Node):
     def __init__(self, x, y):
@@ -249,12 +308,16 @@ class OscilloscopeNode(Node):
             oldY = y
 
     def getY(self, x):
-        v = self.ins[0].getValue((x/self.W)*self.ins[1].default)
+        v = self.ins[0].getValue((x/self.W)*self.ins[1].getValue(0))
         return (v>1 or v<-1, self.b[1]+self.HEADER+self.H/2- min(max(v,-1),1) *self.H/2)
 
     def updateBounds(self):
         Node.updateBounds(self)
         self.b = [self.b[0],self.b[1],self.b[2],self.b[3]+self.H+30]
 
-NEWNODESLIST = [ValueNode(0,0), GeneratorNode(0,0), TransformNode(0,0), MathNode(0,0), OscilloscopeNode(0,0)]
-NODEMENU = ["Disconnect all", "", "Delete node"]
+def heaviside(t):
+    t = np.maximum(0,np.minimum(0.9,t+0.5))
+    return np.round(t%1)
+
+NEWNODESLIST = [ValueNode(0,0), GeneratorNode(0,0), TransformNode(0,0), SectionNode(0,0), MathNode(0,0), OscilloscopeNode(0,0)]
+NODEMENU = ["Duplicate", "Disconnect all", "", "Delete node"]

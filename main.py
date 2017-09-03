@@ -121,18 +121,8 @@ def process(blocksize):
     ###
     if window.killSound:
         window.killSound = False
-        print("Resetting midi input...")
-
-        '''
-        #Events stop coming in on stall
-        cons = midiport.connections
-        midiport.unregister()
-        midiport = client.midi_inports.register('Midi Input2')
-        for con in cons:
-            midiport.connect(con)
-        '''
-
-
+        print("Killing all notes...")
+        voices.clear()
     ###
 
     # Step 3: Create sine tones, apply envelopes, add to output buffer

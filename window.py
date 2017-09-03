@@ -1,6 +1,7 @@
 import threading
 from threading import Thread
 import string
+import copy
 
 import pygame
 
@@ -66,10 +67,15 @@ class Window(threading.Thread):
                     if event.button == 1:
                         if self.menuing:
                             if self.menu[2] != -1:
-                                if self.menu[0] == M_NEWNODE: self.instrument.nodes.append(NEWNODESLIST[self.menu[2]].__class__(self.bMenu[0],self.bMenu[1]))
+                                if self.menu[0] == M_NEWNODE: self.instrument.nodes.insert(0, NEWNODESLIST[self.menu[2]].__class__(self.bMenu[0],self.bMenu[1]))
                                 elif self.menu[0] == M_NODE:
-                                    if self.menu[2] == 0: self.menu[1].disconnectAll(self.instrument.nodes)
-                                    elif self.menu[2] == 2: self.menu[1].destroy(self.instrument.nodes)
+                                    if self.menu[2] == 0:
+                                        nodeCopy = copy.deepcopy(self.menu[1])
+                                        self.instrument.nodes.insert(0, nodeCopy)
+                                        nodeCopy.b = [self.bMenu[0], self.bMenu[1], nodeCopy.b[2], nodeCopy.b[3]]
+                                        nodeCopy.updateBounds()
+                                    elif self.menu[2] == 1: self.menu[1].disconnectAll(self.instrument.nodes)
+                                    elif self.menu[2] == 3: self.menu[1].destroy(self.instrument.nodes)
                             self.menuing = False
                             self.menu = (self.menu[0], self.menu[2], -1)
                         else: self.mouseDown = True
